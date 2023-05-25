@@ -1,0 +1,499 @@
+What works so far: 
+* Creating rank 1 or rank 2 tensors
+* Element-wise plus, minus, divide
+* Multiply with rank 2 Tensor on the left and rank 1 tensor on the right
+* Transpose rank n Tensor
+* LinearRegression using Tensor (LogisticRegression and basic NeuralNet in progress)
+
+## Code: 
+
+from Vector import DynamicVector
+from String import String
+from List import VariadicList, DimList
+from Math import exp
+
+fn map(
+    vec: DynamicVector[F64], 
+    f: fn(F64) -> F64
+) -> DynamicVector[F64]:
+    var new_vec = DynamicVector[F64]()
+    for i in range(vec.size):
+        new_vec.push_back(f(vec[i]))
+
+    return new_vec
+
+fn reverse_f_vec(vec: DynamicVector[F64]) -> DynamicVector[F64]:
+    var reversed_vec = DynamicVector[F64]()
+    for i in range(vec.size-1, -1, -1):
+        reversed_vec.push_back(vec[i])
+    return reversed_vec
+
+fn reverse_int_vec(vec: DynamicVector[Int]) -> DynamicVector[Int]:
+    var reversed_vec = DynamicVector[Int]()
+    for i in range(vec.size-1, -1, -1):
+        reversed_vec.push_back(vec[i])
+    return reversed_vec
+
+fn print_f_vec(vec: DynamicVector[F64]):
+    var s = String()
+    s += "["
+    
+    for i in range(vec.size):
+        s += vec[i]
+        s += " "
+    s += "]"
+    
+    print(s)
+
+fn print_int_vec(vec: DynamicVector[Int]):
+    var s = String()
+    s += "["
+    for i in range(vec.size):
+        s += vec[i]
+        s += " "
+    s += "]"
+    print(s)
+
+fn new_vec(*args: F64) -> DynamicVector[F64]:
+    let args_list: VariadicList[F64] = args
+    var dv = DynamicVector[F64]()
+    for i in range(args_list.__len__()):
+        dv.push_back(args[i])
+    return dv
+
+fn new_int_vec(*args: Int) -> DynamicVector[Int]:
+    let args_list: VariadicList[Int] = args
+    var dv = DynamicVector[Int]()
+    for i in range(args_list.__len__()):
+        dv.push_back(args[i])
+    return dv
+    
+fn sum(vec: DynamicVector[F64]) -> F64:
+    var value = F64(0)
+    for i in range(vec.size):
+        value += vec[i]
+    return value
+    
+fn product(vec: DynamicVector[Int]) -> Int:
+    var value = 1
+    for i in range(vec.size):
+        value *= vec[i]
+    return value
+
+fn mean(vec: DynamicVector[F64]) -> F64:
+    return sum(vec)/vec.size
+
+fn is_int_vec_eq(vec1: DynamicVector[Int], vec2: DynamicVector[Int]) -> Bool:
+    if vec1.size != vec2.size:
+        return False
+    
+    for i in range(vec1.size):
+        if vec1[i] != vec2[i]:
+            return False
+    
+    return True
+
+let v = new_vec(1.0, 2.0, 3.0)
+let iv = new_int_vec(4,5,6)
+iv[2] = 7
+print_int_vec(iv)
+print_f_vec(v)
+print_f_vec(reverse_f_vec(v))
+print(sum(v))
+print(mean(v))
+print(product(iv))
+
+[4 5 7 ]
+[1.000000 2.000000 3.000000 ]
+[3.000000 2.000000 1.000000 ]
+6.000000
+2.000000
+140
+
+
+fn _scalar_to_tensor_index(shape: DynamicVector[Int], scalar: Int) -> DynamicVector[Int]:
+    var indices = DynamicVector[Int](shape.size)
+    for _ in range(shape.size):
+        indices.push_back(0)
+    var remaining = scalar
+
+    for i in range(shape.size - 1, -1, -1):
+        indices[i] = remaining % shape[i]
+        remaining = remaining // shape[i]
+
+    return indices
+
+fn _tensor_to_scalar_index(shape: DynamicVector[Int], indices: DynamicVector[Int]) -> Int:
+    var index = 0
+    var stride = 1
+
+    for i in range(indices.size-1, -1, -1):
+        index += indices[i] * stride
+        stride *= shape[i]
+
+    return index
+
+let shape = new_int_vec(3,4,5)
+for i in range(60):
+    let tensor_index = _scalar_to_tensor_index(shape, i)
+    let scalar_index = _tensor_to_scalar_index(shape, tensor_index)
+    if i != scalar_index:
+        raise Error("something's not right")
+        
+        
+alias DEBUG = False
+@value
+struct Tensor:
+    var shape: DynamicVector[Int] # TODO use type param for type safe ops
+    var data: DynamicVector[F64]
+    
+    fn __init__(inout self, owned shape: DynamicVector[Int], owned data: DynamicVector[F64]) raises:
+        self.shape = shape
+        self.data = data
+        if shape.size > 2:
+            raise Error("max 2d for now")
+    
+    @staticmethod
+    fn create_1d(*args: F64) raises -> Tensor:
+        let args_list: VariadicList[F64] = args
+        
+        var data = DynamicVector[F64]()
+        for i in range(args_list.__len__()):
+            data.push_back(args[i])
+        
+        var shape = DynamicVector[Int]()
+        shape.push_back(data.size)
+        
+        return Self(shape^, data^)
+    
+    @staticmethod
+    fn zeros(count: Int) raises -> Tensor:
+        var data = DynamicVector[F64](count)
+        for i in range(count):
+            data.push_back(0)
+        
+        var shape = DynamicVector[Int]()
+        shape.push_back(count)
+        
+        return Self(shape^, data^)
+    
+    @staticmethod
+    fn ones(count: Int) raises -> Tensor:
+        var data = DynamicVector[F64](count)
+        for i in range(count):
+            data.push_back(1.0)
+        
+        var shape = DynamicVector[Int]()
+        shape.push_back(count)
+        
+        return Self(shape^, data^)
+        
+    fn reshape(inout self, new_shape: DynamicVector[Int]):
+        self.shape = new_shape
+
+    fn __getitem__(self, indices: DynamicVector[Int]) -> F64:
+        let index = self.tensor_to_scalar_index(indices)
+        return self.data[index]
+
+    fn __setitem__(inout self, indices: DynamicVector[Int], value: F64):
+        let index = self.tensor_to_scalar_index(indices)
+        self.data[index] = value
+        
+    fn transpose(self) raises -> Tensor:
+        let rank = self.shape.size
+        let new_shape = reverse_int_vec(self.shape)
+        
+        var transposed_data = DynamicVector[F64](self.data.size)
+        
+        # TODO THIS DOESN'T WORK
+        for transposed_scalar_index in range(self.data.size):
+            let transposed_tensor_index = _scalar_to_tensor_index(new_shape, transposed_scalar_index)
+            let self_tensor_index = reverse_int_vec(transposed_tensor_index)
+            let self_scalar_index = _tensor_to_scalar_index(self.shape, self_tensor_index)
+            transposed_data.push_back(self.data[self_scalar_index])
+            
+            if DEBUG:
+                print("**")
+                print("transposed_scalar_index: ", transposed_scalar_index)
+                print("self_scalar_index: ", self_scalar_index)
+                print("transposed_tensor_index:")
+                print_int_vec(transposed_tensor_index)
+                print("data: ", self.data[self_scalar_index], " at")
+                print_int_vec(self_tensor_index)
+                print_f_vec(transposed_data)
+        
+        return Tensor(new_shape^, transposed_data^)
+    
+    fn scalar_to_tensor_index(self, scalar: Int) -> DynamicVector[Int]:
+        return _scalar_to_tensor_index(self.shape, scalar)
+
+    fn tensor_to_scalar_index(self, indices: DynamicVector[Int]) -> Int:
+        return _tensor_to_scalar_index(self.shape, indices)
+    
+    fn dot(self, other: Tensor) raises -> Tensor:
+        if not is_int_vec_eq(self.shape, other.shape):
+            print("!! Error in dot")
+            print("self.shape")
+            print_int_vec(self.shape)
+            print("other.shape")
+            print_int_vec(other.shape)
+            raise Error("shapes must be equal")
+            
+        var result_data = DynamicVector[F64](self.data.size)
+        
+        for i in range(self.data.size):
+            result_data.push_back(self.data[i] * other.data[i])
+        
+        return Tensor(self.shape.deepcopy(), result_data^)
+    
+    fn multiply(self, other: Tensor) raises -> Tensor:
+        let self_rank = self.shape.size
+        let other_rank = other.shape.size
+        if self_rank == 2 and other_rank == 1:
+            if self.shape[1] != other.shape[0]:
+                raise Error("shapes do not align")
+            
+            var new_data = DynamicVector[F64](self.shape[1])
+            for row in range(self.shape[0]):
+                var running_sum = F64(0)
+                for col in range(self.shape[1]):
+                    running_sum += self.data[row * self.shape[1] + col] * other.data[col]
+                new_data.push_back(running_sum)
+            return Tensor(new_int_vec(self.shape[0])^, new_data^)
+        else:
+            raise Error("not implemented yet")
+    
+    fn dot(self, value: F64) raises -> Tensor:
+        var result_data = DynamicVector[F64](self.data.size)
+        for i in range(self.data.size):
+            result_data.push_back(self.data[i] * value)
+        return Tensor(self.shape.deepcopy(), result_data^)
+    
+    fn exponential(self) raises -> Tensor:
+        """e^x, Ɐx ∈ Tensor (element-wise)"""
+        var result_data = DynamicVector[F64](self.data.size)
+        for i in range(self.data.size):
+            result_data.push_back(exp(self.data[i]))
+        return Tensor(self.shape.deepcopy(), result_data^)
+    
+    fn pow(self, exponent: Int) raises -> Tensor:
+        var result_data = DynamicVector[F64](self.data.size)
+        for i in range(self.data.size):
+            result_data.push_back(self.data[i] ** exponent)
+        return Tensor(self.shape.deepcopy(), result_data^)
+    
+    fn divide(self, other: Tensor) raises -> Tensor:
+        if not is_int_vec_eq(self.shape, other.shape):
+            print("!! Error in divide")
+            print("self.shape")
+            print_int_vec(self.shape)
+            print("other.shape")
+            print_int_vec(other.shape)
+            raise Error("shapes must be equal")
+            
+        var result_data = DynamicVector[F64](self.data.size)
+        
+        for i in range(self.data.size):
+            result_data.push_back(self.data[i] / other.data[i])
+        
+        return Tensor(self.shape.deepcopy(), result_data^)
+    
+    fn plus(self, other: Tensor) raises -> Tensor:
+        if not is_int_vec_eq(self.shape, other.shape):
+            print("!! Error in plus")
+            print("self.shape")
+            print_int_vec(self.shape)
+            print("other.shape")
+            print_int_vec(other.shape)
+            raise Error("shapes must be equal")
+            
+        var result_data = DynamicVector[F64](self.data.size)
+        
+        for i in range(self.data.size):
+            result_data.push_back(self.data[i] + other.data[i])
+        
+        return Tensor(self.shape.deepcopy(), result_data^)
+
+    fn plus(self, value: F64) raises -> Tensor:
+        var result_data = DynamicVector[F64](self.data.size)
+        
+        for i in range(self.data.size):
+            result_data.push_back(self.data[i] + value)
+        
+        return Tensor(self.shape.deepcopy(), result_data^)
+    
+    @always_inline
+    fn __add__(self, other: Tensor) raises -> Tensor:
+        return self.plus(other)
+
+    fn minus(self, other: Tensor) raises -> Tensor:
+        if not is_int_vec_eq(self.shape, other.shape):
+            print("!! Error in minus")
+            print("self.shape")
+            print_int_vec(self.shape)
+            print("other.shape")
+            print_int_vec(other.shape)
+            raise Error("shapes must be equal")
+            
+        var result_data = DynamicVector[F64](self.data.size)
+        
+        for i in range(self.data.size):
+            result_data.push_back(self.data[i] - other.data[i])
+        
+        return Tensor(self.shape.deepcopy(), result_data^)
+
+    fn minus(self, value: F64) raises -> Tensor:
+        var result_data = DynamicVector[F64](self.data.size)
+        
+        for i in range(self.data.size):
+            result_data.push_back(self.data[i] - value)
+        
+        return Tensor(self.shape.deepcopy(), result_data^)
+
+    @always_inline
+    fn __sub__(self, other: Tensor) raises -> Tensor:
+        return self.minus(other)
+        
+    fn sum(self) -> F64:
+        var value = F64(0)
+        for i in range(self.data.size):
+            value += self.data[i]
+        return value
+
+    fn mean(self) -> F64:
+        return self.sum() / self.data.size
+    
+    fn show(self) raises:
+        if self.shape.size == 2:
+            print("Shape:")
+            print_int_vec(self.shape)
+            var s = String()
+            s += "Data:\n[\n"
+            for i in range(self.shape[0]):
+                s += " ["
+                for j in range(self.shape[1]):
+                    let index = i * self.shape[1] + j
+                    s += self.data[index]
+                    s += " "
+                s += "]\n"
+            s += "]"
+            print(s)
+        elif self.shape.size == 1:
+            print("Shape:")
+            print_int_vec(self.shape)
+            print("Data:")
+            print_f_vec(self.data)
+        else:
+            raise Error("max 2d for now")
+            
+warning: �[0;1;35m�[1mExpression [15]:85:23: �[0m�[1munreachable code after 'if False'
+�[0m                print("**")
+�[0;1;32m                      ^
+�[0m�[0m
+
+
+
+print("---- create 2 tensors")
+var shape = new_int_vec(2,3)
+
+var data = DynamicVector[F64]()
+for i in range(6):
+    data.push_back(F64(i))
+    
+let tensor = Tensor(shape.deepcopy(), data^)
+tensor.show()
+
+var data2 = DynamicVector[F64]()
+for i in range(6):
+    data2.push_back(F64(i+4))
+    
+let tensor2 = Tensor(shape.deepcopy(), data2^)
+tensor2.show()
+
+print("---- Add")
+let tensor3 = tensor + tensor2
+tensor3.show()
+
+print("---- Transpose")
+tensor3.transpose().show()
+
+print("---- Multiply")
+let rank1_tensor = Tensor(
+    new_int_vec(2),
+    new_vec(-1.0, 1.0)
+)
+rank1_tensor.show()
+tensor3.transpose().multiply(rank1_tensor).show()
+
+---- create 2 tensors
+Shape:
+[2 3 ]
+Data:
+[
+ [0.000000 1.000000 2.000000 ]
+ [3.000000 4.000000 5.000000 ]
+]
+Shape:
+[2 3 ]
+Data:
+[
+ [4.000000 5.000000 6.000000 ]
+ [7.000000 8.000000 9.000000 ]
+]
+---- Add
+Shape:
+[2 3 ]
+Data:
+[
+ [4.000000 6.000000 8.000000 ]
+ [10.000000 12.000000 14.000000 ]
+]
+---- Transpose
+Shape:
+[3 2 ]
+Data:
+[
+ [4.000000 10.000000 ]
+ [6.000000 12.000000 ]
+ [8.000000 14.000000 ]
+]
+---- Multiply
+Shape:
+[2 ]
+Data:
+[-1.000000 1.000000 ]
+Shape:
+[3 ]
+Data:
+[6.000000 6.000000 6.000000 ]
+
+
+@value
+struct LinearRegression:
+    var slope: F64
+    var intercept: F64
+    
+    @staticmethod
+    fn fit(x: Tensor, y: Tensor) raises -> Self:
+        let x_mean = x.mean()
+        let y_mean = y.mean()
+
+        let x_diff = x.minus(x_mean)
+        let y_diff = y.minus(y_mean)
+
+        let slope = x_diff.dot(y_diff).sum() / x_diff.pow(2).sum()
+        let intercept = y_mean - slope * x_mean
+        
+        return Self(slope, intercept)
+
+# The good stuff
+let lin_reg = LinearRegression.fit(
+    Tensor.create_1d(1.0, 2.0, 3.0),
+    Tensor.create_1d(3.0, 5.0, 7.0)
+)
+
+print(lin_reg.slope)
+print(lin_reg.intercept)
+
+2.000000
+1.000000
