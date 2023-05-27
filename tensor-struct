@@ -497,3 +497,73 @@ print(lin_reg.intercept)
 
 2.000000
 1.000000
+
+
+fn sigmoid(t: Tensor) raises -> Tensor:
+    return Tensor.ones(t.data.size).divide(
+        t.multiply(-1.0).exponential().plus(1.0)
+    )
+
+fn sigmoid_backwards(dA: Tensor, Z: Tensor) raises -> Tensor:
+    let s = sigmoid(Z)
+    let dZ = dA.multiply(s).multiply(Tensor.ones(s.data.size).minus(s))
+    return dZ
+
+@value
+struct LogisticRegression:
+    var weights: DynamicVector[F64]
+    var bias: F64
+    
+    @staticmethod
+    fn fit(x: Tensor, y: Tensor, learning_rate: F64, num_iterations: Int) raises -> Self:
+        let num_features = x.shape[1]
+        var weights = Tensor.zeros(num_features)
+        var bias = F64(0)
+        
+        let num_samples = x.shape[0]
+        
+        for _ in range(num_iterations):
+            let linear_combination = x.multiply(weights).plus(bias)
+            let probabilities = sigmoid(linear_combination)
+            
+            let gradient_weights = x.transpose().multiply(probabilities.minus(y)).multiply(1.0/num_samples)
+            let gradient_bias = (1.0/num_samples) * probabilities.minus(y).sum()
+            
+            let increment_weights =  gradient_weights.multiply(learning_rate)
+            let increment_bias = learning_rate * gradient_bias
+                                    
+            weights = weights.minus(gradient_weights.multiply(learning_rate))
+            bias -= learning_rate * gradient_bias
+        
+        return Self(weights.data, bias)
+
+# The good stuff
+var shape = new_int_vec(3,2)
+
+var data = DynamicVector[F64]()
+for i in range(6):
+    data.push_back(F64(i))
+let X = Tensor(shape.deepcopy(), data^)
+X.show()
+
+let lr = LogisticRegression.fit(
+    X,
+    Tensor.create_1d(1.0, 0.0, 1.0),
+    0.1,
+    10
+)
+
+print_f_vec(lr.weights)
+print(lr.bias)
+
+Shape:
+[3 2 ]
+Data:
+[
+ [0.0 1.0 ]
+ [2.0 3.0 ]
+ [4.0 5.0 ]
+]
+[0.051045987969191436 0.11980058954987352 ]
+0.068754601580682098
+
